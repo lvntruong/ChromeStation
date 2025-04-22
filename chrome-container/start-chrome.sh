@@ -75,10 +75,12 @@ if [ ! -f "$BROWSER_CMD" ]; then
     if [ -f "/opt/google/chrome/chrome" ]; then
         BROWSER_CMD="/opt/google/chrome/chrome"
         echo "Đã tìm thấy Chrome tại $BROWSER_CMD"
+    elif [ -f "/usr/bin/chromium" ]; then
+        BROWSER_CMD="/usr/bin/chromium"
+        echo "Đã tìm thấy Chromium tại $BROWSER_CMD"
     else
-        echo "Tìm kiếm Chrome trên hệ thống:"
-        find / -name "chrome" -o -name "google-chrome*" -type f 2>/dev/null
-        find / -name "chrome" -o -name "google-chrome*" -type f -executable 2>/dev/null | head -5
+        echo "Tìm kiếm Chrome/Chromium trên hệ thống:"
+        find / -name "chrome" -o -name "google-chrome*" -o -name "chromium" -type f 2>/dev/null | head -10
         
         # Thử cách cuối cùng
         if command -v google-chrome >/dev/null 2>&1; then
@@ -87,8 +89,11 @@ if [ ! -f "$BROWSER_CMD" ]; then
         elif command -v google-chrome-stable >/dev/null 2>&1; then
             BROWSER_CMD=$(command -v google-chrome-stable)
             echo "Tìm thấy Google Chrome Stable trong PATH: $BROWSER_CMD"
+        elif command -v chromium >/dev/null 2>&1; then
+            BROWSER_CMD=$(command -v chromium)
+            echo "Tìm thấy Chromium trong PATH: $BROWSER_CMD"
         else
-            echo "Không tìm thấy trình duyệt Chrome! Thoát."
+            echo "Không tìm thấy trình duyệt Chrome/Chromium! Thoát."
             exit 1
         fi
     fi

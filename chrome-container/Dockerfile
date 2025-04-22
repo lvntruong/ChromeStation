@@ -48,6 +48,7 @@ RUN apt-get update && apt-get install -y \
     libxss1 \
     libegl1 \
     sudo \
+    software-properties-common \
     x11-utils \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
@@ -60,9 +61,11 @@ RUN apt-get update && \
         apt-get install -y ./google-chrome-stable_current_amd64.deb && \
         rm -f google-chrome-stable_current_amd64.deb; \
     elif [ "$ARCH" = "arm64" ]; then \
-        # Chrome không hỗ trợ arm64 dưới dạng deb package, dùng Chromium
-        apt-get install -y chromium-browser && \
-        ln -sf /usr/bin/chromium-browser /usr/bin/google-chrome-stable; \
+        # Cài đặt Chromium từ PPA thay vì snap
+        add-apt-repository ppa:xtradeb/apps -y && \
+        apt-get update && \
+        apt-get install -y chromium && \
+        ln -sf /usr/bin/chromium /usr/bin/google-chrome-stable; \
     else \
         echo "Kiến trúc $ARCH không được hỗ trợ" && exit 1; \
     fi && \
