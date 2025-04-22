@@ -15,10 +15,13 @@ fi
 
 # Đường dẫn đến thư mục hiện tại
 CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROFILES_DIR="$CURRENT_DIR/../chrome-profiles"
+PROFILES_DIR="$HOME/chrome-profiles"
 
 # Tạo thư mục profiles nếu chưa tồn tại
 mkdir -p "$PROFILES_DIR/default"
+chmod -R 777 "$PROFILES_DIR"
+
+echo "Sử dụng thư mục profiles: $PROFILES_DIR"
 
 # Phát hiện kiến trúc
 ARCH=$(uname -m)

@@ -20,14 +20,17 @@ const port = 3000;
 // Store information about running containers
 const activeSessions = {};
 
-// Cấu hình thư mục profile đúng đường dẫn trong container
-const profilesDir = '/app/chrome-profiles';
-console.log(`Profile directory in container: ${profilesDir}`);
+// Directory for Chrome profiles
+const localProfilesDir = path.join(os.homedir(), 'chrome-profiles');
+const containerProfilesDir = '/app/chrome-profiles'; // Đường dẫn trong container
+
+console.log(`Local profile directory: ${localProfilesDir}`);
+console.log(`Container profile directory: ${containerProfilesDir}`);
 
 // Ensure profiles directory exists
-if (!fs.existsSync(profilesDir)) {
-  fs.mkdirSync(profilesDir, { recursive: true });
-  console.log(`Created profiles directory: ${profilesDir}`);
+if (!fs.existsSync(localProfilesDir)) {
+  fs.mkdirSync(localProfilesDir, { recursive: true });
+  console.log(`Created local directory: ${localProfilesDir}`);
 }
 
 // Serve static files
@@ -41,11 +44,11 @@ app.get('/admin', (req, res) => {
 // API to list available profiles
 app.get('/profiles', (req, res) => {
   try {
-    const profiles = fs.readdirSync(profilesDir)
-      .filter(file => fs.statSync(path.join(profilesDir, file)).isDirectory())
+    const profiles = fs.readdirSync(localProfilesDir)
+      .filter(file => fs.statSync(path.join(localProfilesDir, file)).isDirectory())
       .map(profile => ({
         name: profile,
-        path: path.join(profilesDir, profile)
+        path: path.join(localProfilesDir, profile)
       }));
     
     res.json({ profiles });
@@ -62,19 +65,19 @@ app.get('/start-session', async (req, res) => {
   const profileName = req.query.profile || 'default';
   
   // Check if profile exists, if not use default
-  const profilePath = path.join(profilesDir, profileName);
-  if (!fs.existsSync(profilePath)) {
-    fs.mkdirSync(profilePath, { recursive: true });
-    console.log(`Created profile directory: ${profilePath}`);
+  const localProfilePath = path.join(localProfilesDir, profileName);
+  if (!fs.existsSync(localProfilePath)) {
+    fs.mkdirSync(localProfilePath, { recursive: true });
+    console.log(`Created profile directory: ${localProfilePath}`);
   }
   
   try {
-    console.log(`Profile path: ${profilePath}`);
+    console.log(`Local profile path: ${localProfilePath}`);
     
     // Create a simple volume mount test to verify binding
     try {
-      fs.writeFileSync(path.join(profilePath, 'test.txt'), 'Testing volume mount');
-      console.log(`Created test file in ${path.join(profilePath, 'test.txt')}`);
+      fs.writeFileSync(path.join(localProfilePath, 'test.txt'), 'Testing volume mount');
+      console.log(`Created test file in ${path.join(localProfilePath, 'test.txt')}`);
     } catch (err) {
       console.error(`Error creating test file: ${err.message}`);
     }
@@ -82,7 +85,15 @@ app.get('/start-session', async (req, res) => {
     // Create and start container using Dockerode
     console.log(`Starting container with profile ${profileName} on port ${containerPort}`);
     
-    // Sử dụng Docker volume được quản lý
+    // Determine platform
+    const platform = os.platform();
+    console.log(`Host platform: ${platform}`);
+    
+    // Sử dụng đường dẫn trong home directory
+    const containerProfilePath = path.join(containerProfilesDir, profileName);
+    const binds = [`${localProfilesDir}:${containerProfilesDir}:rw`];
+    console.log(`Using bind mount: ${binds[0]}`);
+    
     const container = await docker.createContainer({
       Image: 'chrome-kiosk',
       name: `chrome-session-${sessionId}`,
@@ -98,10 +109,7 @@ app.get('/start-session', async (req, res) => {
         PortBindings: {
           '8080/tcp': [{ HostPort: `${containerPort}` }]
         },
-        Binds: [
-          "chrome-profiles:/app/chrome-profiles:rw"
-        ],
-        NetworkMode: "chrome-browser_chrome-network", // Kết nối đến mạng của docker-compose
+        Binds: binds,
         Privileged: false,
         ReadonlyRootfs: false
       }
@@ -157,7 +165,7 @@ app.post('/create-profile/:name', (req, res) => {
     return res.status(400).json({ error: 'Invalid profile name' });
   }
   
-  const profilePath = path.join(profilesDir, name);
+  const profilePath = path.join(localProfilesDir, name);
   
   try {
     if (!fs.existsSync(profilePath)) {
@@ -184,8 +192,8 @@ app.get('/duplicate-profile', (req, res) => {
     return res.status(400).json({ error: 'Invalid target profile name' });
   }
   
-  const sourcePath = path.join(profilesDir, source);
-  const targetPath = path.join(profilesDir, target);
+  const sourcePath = path.join(localProfilesDir, source);
+  const targetPath = path.join(localProfilesDir, target);
   
   try {
     if (!fs.existsSync(sourcePath)) {
@@ -334,8 +342,8 @@ app.get('/debug/docker', async (req, res) => {
       version: version,
       platform: os.platform(),
       hostname: os.hostname(),
-      profilesDir: profilesDir,
-      volumes: await docker.listVolumes()
+      profilesDir: localProfilesDir,
+      profilesDirResolved: path.resolve(localProfilesDir)
     });
   } catch (error) {
     res.status(500).json({ error: error.message, stack: error.stack });

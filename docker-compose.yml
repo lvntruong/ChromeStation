@@ -8,7 +8,7 @@ services:
       - "3000:3000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ./chrome-profiles:/chrome-profiles
+      - chrome-profiles:/app/chrome-profiles  # Sử dụng volume được quản lý
     environment:
       - NODE_ENV=production
       - DOCKER_HOST=unix:///var/run/docker.sock
@@ -21,7 +21,7 @@ services:
       context: ./chrome-container
     image: chrome-kiosk
     volumes:
-      - ./chrome-profiles:/app/chrome-profiles
+      - chrome-profiles:/app/chrome-profiles  # Sử dụng volume được quản lý
     ports:
       - "8080:8080"
       - "5900:5900"
@@ -33,5 +33,4 @@ networks:
     driver: bridge
 
 volumes:
-  chrome-profiles:
-    driver: local 
+  chrome-profiles:  # Định nghĩa volume được quản lý bởi Docker
