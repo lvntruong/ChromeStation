@@ -1,19 +1,20 @@
-FROM node:16
+FROM node:18-alpine
 
 WORKDIR /app
 
-# Cài đặt các dependencies
-COPY package.json .
-RUN npm install
+# Copy package files để cài đặt dependencies trước
+COPY package*.json ./
 
-# Copy code nguồn
+# Cài đặt dependencies và nodemon toàn cục
+RUN npm install && npm install -g nodemon
+
+# Copy source code
 COPY . .
 
-# Tạo thư mục profiles
+# Tạo thư mục profiles nếu chưa có
 RUN mkdir -p /app/chrome-profiles
 
-# Expose port
 EXPOSE 3000
 
-# Khởi động server
-CMD ["node", "server.js"] 
+# Sử dụng CMD thay vì ENTRYPOINT để cho phép override từ docker-compose command
+CMD ["npm", "start"] 

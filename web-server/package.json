@@ -4,7 +4,8 @@
   "description": "Hệ thống quản lý các phiên Chrome cho nhiều người dùng",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "nodemon server.js --watch ./ --legacy-watch"
   },
   "keywords": [
     "chrome",

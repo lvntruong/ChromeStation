@@ -9,22 +9,12 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./chrome-profiles:/app/chrome-profiles:rw  # Sử dụng thư mục từ dự án
+      - ./web-server:/app:rw  # Mount thư mục source code vào container
     environment:
-      - NODE_ENV=production
+      - NODE_ENV=development
       - DOCKER_HOST=unix:///var/run/docker.sock
+    command: npm run dev  # Sử dụng nodemon trong development mode
     restart: unless-stopped
-    networks:
-      - chrome-network
-
-  chrome-base:
-    build:
-      context: ./chrome-container
-    image: chrome-kiosk
-    volumes:
-      - ./chrome-profiles:/app/chrome-profiles:rw  # Sử dụng thư mục từ dự án
-    ports:
-      - "8080:8080"
-      - "5900:5900"
     networks:
       - chrome-network
 

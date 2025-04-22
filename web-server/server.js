@@ -359,4 +359,5 @@ app.get('/admin/:sessionId', (req, res) => {
 // Start the server
 server.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);
+  console.log('Server đang chạy trong chế độ phát triển với hot-reload');
 }); 
