@@ -18,6 +18,19 @@ services:
     networks:
       - chrome-network
 
+  chrome-base:
+    build:
+      context: ./chrome-container
+    image: chrome-kiosk
+    profiles: ["no-autostart"]  # Không tự khởi động container này 
+    volumes:
+      - ./chrome-profiles:/app/chrome-profiles:rw  # Sử dụng thư mục từ dự án
+    ports:
+      - "8080:8080"
+      - "5900:5900"
+    networks:
+      - chrome-network
+
 networks:
   chrome-network:
     driver: bridge

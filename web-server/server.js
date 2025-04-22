@@ -83,7 +83,7 @@ app.get('/start-session', async (req, res) => {
     console.log(`Starting container with profile ${profileName} on port ${containerPort}`);
     
     // Xác định đường dẫn tuyệt đối đến thư mục chrome-profiles
-    const absoluteProfilesPath = path.resolve('/Users/dev/Documents/Mine/chrome-browser/chrome-profiles');
+    const absoluteProfilesPath = path.resolve('/Users/dev/Documents/Mine/chrome-browser/chrome-profiles/' + profileName);
     console.log(`Using profiles directory: ${absoluteProfilesPath}`);
     
     const container = await docker.createContainer({
