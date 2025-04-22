@@ -159,6 +159,19 @@
     </div>
     
     <div class="section">
+      <h2>Tạo phiên Admin</h2>
+      <div class="admin-form">
+        <select id="admin-profile" style="min-width: 200px;">
+          <option value="">Chọn profile...</option>
+          <!-- Options sẽ được thêm vào đây -->
+        </select>
+        <input type="password" id="admin-key" placeholder="Admin key" style="min-width: 200px;">
+        <button onclick="startAdminSession()" class="success">Tạo phiên Admin</button>
+      </div>
+      <p><small>Phiên admin có quyền truy cập đầy đủ vào Chrome, không bị hạn chế các tính năng.</small></p>
+    </div>
+    
+    <div class="section">
       <h2>Phiên đang hoạt động</h2>
       <table>
         <thead>
@@ -225,17 +238,30 @@
           const profilesList = document.getElementById('profiles-list');
           profilesList.innerHTML = '';
           
+          // Cập nhật dropdown cho admin session
+          const adminProfileSelect = document.getElementById('admin-profile');
+          // Giữ lại option đầu tiên
+          adminProfileSelect.innerHTML = '<option value="">Chọn profile...</option>';
+          
           data.profiles.forEach(profile => {
+            // Thêm vào bảng profiles
             const row = document.createElement('tr');
             row.innerHTML = `
               <td>${profile.name}</td>
               <td>${profile.path}</td>
               <td>
                 <button onclick="startSession('${profile.name}')">Chạy trực tiếp</button>
+                <button onclick="startAdminSession('${profile.name}')" class="success">Chạy với quyền admin</button>
                 <button onclick="duplicateProfile('${profile.name}')" class="success">Nhân bản</button>
               </td>
             `;
             profilesList.appendChild(row);
+            
+            // Thêm option vào dropdown admin session
+            const option = document.createElement('option');
+            option.value = profile.name;
+            option.textContent = profile.name;
+            adminProfileSelect.appendChild(option);
           });
           
           if (data.profiles.length === 0) {
@@ -302,6 +328,45 @@
             alert(`Lỗi: ${data.error}`);
           }
         });
+    }
+    
+    // Tạo phiên admin
+    function startAdminSession(profileName) {
+      const profile = profileName || document.getElementById('admin-profile').value;
+      const adminKey = document.getElementById('admin-key').value;
+      
+      if (!profile) {
+        alert('Vui lòng chọn một profile!');
+        return;
+      }
+      
+      const data = {
+        profile: profile,
+        adminKey: adminKey
+      };
+      
+      fetch('/api/admin/sessions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+      })
+      .then(response => {
+        if (!response.ok) {
+          throw new Error('Network response was not ok');
+        }
+        return response.json();
+      })
+      .then(data => {
+        console.log('Admin session created:', data);
+        connectToSession(data.sessionId, data.port);
+        loadActiveSessions(); // Refresh danh sách phiên
+      })
+      .catch(error => {
+        console.error('Error creating admin session:', error);
+        alert('Không thể tạo phiên admin: ' + error.message);
+      });
     }
     
     // Khởi chạy phiên với profile đã chọn

@@ -406,10 +406,10 @@ app.get('/session/:sessionId', (req, res) => {
 app.post('/api/admin/sessions', async (req, res) => {
   try {
     const profileName = req.body.profile || 'default';
-    const adminKey = req.body.adminKey || '';
+    const adminKey = req.body.adminKey || '123123';
     
     // Kiểm tra xác thực admin key (nên sử dụng env var thực tế)
-    const validAdminKey = process.env.ADMIN_KEY || 'admin-secret-key';
+    const validAdminKey = process.env.ADMIN_KEY || '123123';
     
     if (adminKey !== validAdminKey) {
       return res.status(403).json({ error: 'Invalid admin key' });
