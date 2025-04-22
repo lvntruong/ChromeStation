@@ -13,7 +13,8 @@ services:
     environment:
       - NODE_ENV=development
       - DOCKER_HOST=unix:///var/run/docker.sock
-      - HOST_PROFILES_DIR=/Users/dev/Documents/Mine/chrome-browser/chrome-profiles
+      - ADMIN_KEY=123123
+      # - HOST_PROFILES_DIR=/app/chrome-profiles
     command: npm run dev  # Sử dụng nodemon trong development mode
     restart: unless-stopped
     networks:

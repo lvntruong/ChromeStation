@@ -24,6 +24,12 @@ export LC_ALL=vi_VN.UTF-8
 # Kiểm tra chế độ admin (được chuyển qua từ biến môi trường)
 ADMIN_MODE=${ADMIN_MODE:-0}
 
+# Lấy URL mặc định từ biến môi trường hoặc sử dụng giá trị mặc định
+DEFAULT_URL=${DEFAULT_URL:-"https://www.google.com.vn"}
+echo "[DEBUG] Environment variables:"
+env | grep -E "ADMIN_MODE|DEFAULT_URL"
+echo "[DEBUG] Using DEFAULT_URL: $DEFAULT_URL"
+
 # Kiểm tra các thư mục quan trọng
 echo "Kiểm tra các thư mục và quyền..."
 ls -la /app/chrome-profiles/
@@ -148,7 +154,7 @@ if [ "$ADMIN_MODE" = "1" ]; then
         --window-size=$RESOLUTION \
         --lang=vi \
         --font-render-hinting=medium \
-        "https://www.google.com.vn" 2>&1
+        "$DEFAULT_URL" 2>&1
 else
     echo "Chạy trong chế độ USER với tính năng hạn chế..."
     # Chạy Chrome với tùy chọn an toàn cho người dùng thông thường
@@ -184,5 +190,5 @@ else
         --lang=vi \
         --font-render-hinting=medium \
         --kiosk \
-        "https://www.google.com.vn" 2>&1
+        "$DEFAULT_URL" 2>&1
 fi

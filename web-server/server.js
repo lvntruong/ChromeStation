@@ -49,10 +49,30 @@ app.get('/profiles', (req, res) => {
   try {
     const profiles = fs.readdirSync(profilesDir)
       .filter(file => fs.statSync(path.join(profilesDir, file)).isDirectory())
-      .map(profile => ({
-        name: profile,
-        path: path.join(profilesDir, profile)
-      }));
+      .map(profile => {
+        const profilePath = path.join(profilesDir, profile);
+        let defaultUrl = 'https://www.google.com.vn'; // URL mặc định
+        
+        // Đọc file config.json nếu có
+        const configPath = path.join(profilePath, 'config.json');
+        if (fs.existsSync(configPath)) {
+          try {
+            const configContent = fs.readFileSync(configPath, 'utf8');
+            const config = JSON.parse(configContent);
+            if (config.defaultUrl) {
+              defaultUrl = config.defaultUrl;
+            }
+          } catch (err) {
+            console.error(`Error reading profile config for ${profile}: ${err.message}`);
+          }
+        }
+        
+        return {
+          name: profile,
+          path: profilePath,
+          defaultUrl: defaultUrl
+        };
+      });
     
     res.json({ profiles });
   } catch (error) {
@@ -74,7 +94,73 @@ app.get('/start-session', async (req, res) => {
   }
   
   try {
-    console.log(`Profile path: ${profilePath}`);
+    console.log(`Profile path for ${profileName}: ${profilePath}`);
+    
+    // Lấy URL mặc định của profile hoặc URL mặc định toàn cục
+    let defaultUrl = 'https://www.google.com.vn'; // URL mặc định
+    console.log(`[DEBUG] Starting with default URL: ${defaultUrl}`);
+    
+    // Đọc file config.json của profile
+    const configPath = path.join(profilePath, 'config.json');
+    console.log(`[DEBUG] Checking for config file at: ${configPath}`);
+    console.log(`[DEBUG] Config file exists: ${fs.existsSync(configPath)}`);
+    
+    if (fs.existsSync(configPath)) {
+      try {
+        console.log(`[DEBUG] Reading config file...`);
+        const configContent = fs.readFileSync(configPath, 'utf8');
+        console.log(`[DEBUG] Config content: ${configContent}`);
+        const config = JSON.parse(configContent);
+        console.log(`[DEBUG] Parsed config:`, config);
+        if (config.defaultUrl) {
+          defaultUrl = config.defaultUrl;
+          console.log(`[DEBUG] Found profile-specific URL: ${defaultUrl}`);
+        } else {
+          console.log(`[DEBUG] No defaultUrl found in profile config`);
+        }
+      } catch (err) {
+        console.error(`[DEBUG] Error reading profile config: ${err.message}`);
+      }
+    }
+    
+    // Nếu không có URL mặc định của profile, lấy URL mặc định toàn cục
+    if (defaultUrl === 'https://www.google.com.vn') {
+      console.log(`[DEBUG] Using fallback. Checking global settings...`);
+      const settingsPath = path.join(__dirname, 'settings.json');
+      console.log(`[DEBUG] Settings file path: ${settingsPath}`);
+      console.log(`[DEBUG] Settings file exists: ${fs.existsSync(settingsPath)}`);
+      
+      if (fs.existsSync(settingsPath)) {
+        try {
+          console.log(`[DEBUG] Reading settings file...`);
+          const settingsContent = fs.readFileSync(settingsPath, 'utf8');
+          console.log(`[DEBUG] Settings content: ${settingsContent}`);
+          const settings = JSON.parse(settingsContent);
+          console.log(`[DEBUG] Parsed settings:`, settings);
+          if (settings.defaultUrl) {
+            defaultUrl = settings.defaultUrl;
+            console.log(`[DEBUG] Found global default URL: ${defaultUrl}`);
+          } else {
+            console.log(`[DEBUG] No defaultUrl found in global settings`);
+          }
+        } catch (err) {
+          console.error(`[DEBUG] Error reading global settings: ${err.message}`);
+        }
+      }
+    }
+    
+    console.log(`[DEBUG] Final URL for profile ${profileName}: ${defaultUrl}`);
+    
+    // Đảm bảo URL có định dạng đúng
+    try {
+      new URL(defaultUrl);
+      console.log(`[DEBUG] URL is valid`);
+    } catch (e) {
+      console.log(`[DEBUG] URL invalid, falling back to google.com.vn`);
+      defaultUrl = 'https://www.google.com.vn';
+    }
+    
+    console.log(`Using default URL for profile ${profileName}: ${defaultUrl}`);
     
     // Create a simple volume mount test to verify binding
     try {
@@ -110,7 +196,8 @@ app.get('/start-session', async (req, res) => {
           Env: [
             "DISPLAY=:99",
             "RESOLUTION=1440x900x24",
-            `ADMIN_MODE=${isAdmin ? '1' : '0'}`
+            `ADMIN_MODE=${isAdmin ? '1' : '0'}`,
+            `DEFAULT_URL=${defaultUrl}`
           ],
           HostConfig: {
             PortBindings: {
@@ -406,10 +493,10 @@ app.get('/session/:sessionId', (req, res) => {
 app.post('/api/admin/sessions', async (req, res) => {
   try {
     const profileName = req.body.profile || 'default';
-    const adminKey = req.body.adminKey || '123123';
+    const adminKey = req.body.adminKey || '';
     
     // Kiểm tra xác thực admin key (nên sử dụng env var thực tế)
-    const validAdminKey = process.env.ADMIN_KEY || '123123';
+    const validAdminKey = process.env.ADMIN_KEY || 'admin-secret-key';
     
     if (adminKey !== validAdminKey) {
       return res.status(403).json({ error: 'Invalid admin key' });
@@ -421,6 +508,41 @@ app.post('/api/admin/sessions', async (req, res) => {
       fs.mkdirSync(profilePath, { recursive: true });
       console.log(`Created profile directory for admin session: ${profilePath}`);
     }
+    
+    // Lấy URL mặc định của profile hoặc URL mặc định toàn cục
+    let defaultUrl = 'https://www.google.com.vn'; // URL mặc định
+    
+    // Đọc file config.json của profile
+    const configPath = path.join(profilePath, 'config.json');
+    if (fs.existsSync(configPath)) {
+      try {
+        const configContent = fs.readFileSync(configPath, 'utf8');
+        const config = JSON.parse(configContent);
+        if (config.defaultUrl) {
+          defaultUrl = config.defaultUrl;
+        }
+      } catch (err) {
+        console.error(`Error reading profile config: ${err.message}`);
+      }
+    }
+    
+    // Nếu không có URL mặc định của profile, lấy URL mặc định toàn cục
+    if (defaultUrl === 'https://www.google.com.vn') {
+      const settingsPath = path.join(__dirname, 'settings.json');
+      if (fs.existsSync(settingsPath)) {
+        try {
+          const settingsContent = fs.readFileSync(settingsPath, 'utf8');
+          const settings = JSON.parse(settingsContent);
+          if (settings.defaultUrl) {
+            defaultUrl = settings.defaultUrl;
+          }
+        } catch (err) {
+          console.error(`Error reading global settings: ${err.message}`);
+        }
+      }
+    }
+    
+    console.log(`Using default URL for admin profile ${profileName}: ${defaultUrl}`);
     
     // Tạo session với admin mode
     const sessionId = uuidv4();
@@ -446,7 +568,8 @@ app.post('/api/admin/sessions', async (req, res) => {
           Env: [
             "DISPLAY=:99",
             "RESOLUTION=1440x900x24",
-            "ADMIN_MODE=1"  // Luôn bật admin mode
+            "ADMIN_MODE=1",  // Luôn bật admin mode
+            `DEFAULT_URL=${defaultUrl}`
           ],
           HostConfig: {
             NetworkMode: 'chrome-browser_chrome-network',
@@ -501,6 +624,115 @@ app.post('/api/admin/sessions', async (req, res) => {
   } catch (err) {
     console.error('Error creating admin session:', err);
     res.status(500).json({ error: 'Internal server error', details: err.message });
+  }
+});
+
+// API to save profile URL
+app.post('/save-profile-url/:profileName', (req, res) => {
+  const { profileName } = req.params;
+  const { defaultUrl } = req.body;
+  
+  if (!defaultUrl) {
+    return res.status(400).json({ error: 'URL is required' });
+  }
+  
+  // Validate URL
+  try {
+    new URL(defaultUrl);
+  } catch (e) {
+    return res.status(400).json({ error: 'Invalid URL format' });
+  }
+  
+  try {
+    const profilePath = path.join(profilesDir, profileName);
+    
+    // Kiểm tra xem profile có tồn tại không
+    if (!fs.existsSync(profilePath)) {
+      return res.status(404).json({ error: 'Profile not found' });
+    }
+    
+    // Lưu URL vào file config
+    const configPath = path.join(profilePath, 'config.json');
+    let config = {};
+    
+    // Kiểm tra xem file config đã tồn tại hay chưa
+    if (fs.existsSync(configPath)) {
+      try {
+        const configContent = fs.readFileSync(configPath, 'utf8');
+        config = JSON.parse(configContent);
+      } catch (err) {
+        console.error(`Error reading profile config: ${err.message}`);
+        config = {};
+      }
+    }
+    
+    // Cập nhật URL mặc định
+    config.defaultUrl = defaultUrl;
+    
+    // Ghi file config
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+    console.log(`Updated profile config with default URL: ${defaultUrl}`);
+    
+    res.json({ success: true, message: `Default URL saved for profile ${profileName}` });
+  } catch (error) {
+    console.error(`Error saving profile URL: ${error.message}`);
+    res.status(500).json({ error: 'Failed to save profile URL' });
+  }
+});
+
+// API to save global settings
+app.post('/api/settings', (req, res) => {
+  const { defaultUrl } = req.body;
+  
+  if (!defaultUrl) {
+    return res.status(400).json({ error: 'URL is required' });
+  }
+  
+  // Validate URL
+  try {
+    new URL(defaultUrl);
+  } catch (e) {
+    return res.status(400).json({ error: 'Invalid URL format' });
+  }
+  
+  try {
+    // Lưu cài đặt global vào file
+    const settingsPath = path.join(__dirname, 'settings.json');
+    let settings = { defaultUrl };
+    
+    // Ghi file settings
+    fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+    console.log(`Updated global settings with default URL: ${defaultUrl}`);
+    
+    res.json({ success: true, message: 'Settings saved successfully' });
+  } catch (error) {
+    console.error(`Error saving settings: ${error.message}`);
+    res.status(500).json({ error: 'Failed to save settings' });
+  }
+});
+
+// API to get global settings
+app.get('/api/settings', (req, res) => {
+  try {
+    const settingsPath = path.join(__dirname, 'settings.json');
+    let settings = { defaultUrl: 'https://www.google.com.vn' };
+    
+    if (fs.existsSync(settingsPath)) {
+      try {
+        const settingsContent = fs.readFileSync(settingsPath, 'utf8');
+        settings = JSON.parse(settingsContent);
+      } catch (err) {
+        console.error(`Error reading settings: ${err.message}`);
+      }
+    } else {
+      // Tạo file settings mặc định nếu chưa tồn tại
+      fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+    }
+    
+    res.json({ settings });
+  } catch (error) {
+    console.error(`Error getting settings: ${error.message}`);
+    res.status(500).json({ error: 'Failed to get settings' });
   }
 });
 

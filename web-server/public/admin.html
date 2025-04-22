@@ -172,6 +172,20 @@
     </div>
     
     <div class="section">
+      <h2>Cài đặt hệ thống</h2>
+      <div style="display: flex; flex-direction: column; gap: 15px; max-width: 600px;">
+        <div>
+          <label for="default-url" style="display: block; margin-bottom: 5px; font-weight: bold;">Trang mặc định khi mở Chrome:</label>
+          <div style="display: flex; gap: 10px;">
+            <input type="text" id="default-url" placeholder="https://www.google.com.vn" style="flex: 1; width: 100%;">
+            <button onclick="saveSystemSettings()" class="success">Lưu cài đặt</button>
+          </div>
+          <p><small>Đây là URL sẽ được mở khi khởi động phiên Chrome mới.</small></p>
+        </div>
+      </div>
+    </div>
+    
+    <div class="section">
       <h2>Phiên đang hoạt động</h2>
       <table>
         <thead>
@@ -205,6 +219,7 @@
     document.addEventListener('DOMContentLoaded', function() {
       loadProfiles();
       loadActiveSessions();
+      loadSystemSettings();
       setInterval(loadActiveSessions, 10000); // Refresh sessions every 10 seconds
       
       document.getElementById('close-button').addEventListener('click', closeSession);
@@ -230,6 +245,56 @@
       }
     });
     
+    // Tải cài đặt hệ thống
+    function loadSystemSettings() {
+      fetch('/api/settings')
+        .then(response => response.json())
+        .then(data => {
+          if (data.settings && data.settings.defaultUrl) {
+            document.getElementById('default-url').value = data.settings.defaultUrl;
+          }
+        })
+        .catch(error => {
+          console.error('Error loading settings:', error);
+        });
+    }
+    
+    // Lưu cài đặt hệ thống
+    function saveSystemSettings() {
+      const defaultUrl = document.getElementById('default-url').value.trim();
+      if (!defaultUrl) {
+        alert('Vui lòng nhập URL mặc định');
+        return;
+      }
+      
+      // Validate URL
+      try {
+        new URL(defaultUrl);
+      } catch (e) {
+        alert('URL không hợp lệ. Vui lòng nhập URL đầy đủ, bao gồm http:// hoặc https://');
+        return;
+      }
+      
+      // Gửi cài đặt đến server
+      fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ defaultUrl })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          alert('Đã lưu cài đặt thành công!');
+        } else {
+          alert(`Lỗi: ${data.error}`);
+        }
+      })
+      .catch(error => {
+        console.error('Error saving settings:', error);
+        alert('Không thể lưu cài đặt, vui lòng thử lại sau');
+      });
+    }
+    
     // Tải danh sách profiles
     function loadProfiles() {
       fetch('/profiles')
@@ -244,15 +309,25 @@
           adminProfileSelect.innerHTML = '<option value="">Chọn profile...</option>';
           
           data.profiles.forEach(profile => {
+            // Sử dụng URL mặc định từ server
+            const profileDefaultUrl = profile.defaultUrl || 'https://www.google.com.vn';
+            
             // Thêm vào bảng profiles
             const row = document.createElement('tr');
             row.innerHTML = `
               <td>${profile.name}</td>
-              <td>${profile.path}</td>
+              <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis;">${profile.path}</td>
               <td>
-                <button onclick="startSession('${profile.name}')">Chạy trực tiếp</button>
-                <button onclick="startAdminSession('${profile.name}')" class="success">Chạy với quyền admin</button>
-                <button onclick="duplicateProfile('${profile.name}')" class="success">Nhân bản</button>
+                <div style="display: flex; margin-bottom: 5px;">
+                  <input type="text" placeholder="URL mặc định" value="${profileDefaultUrl}" 
+                         id="url_${profile.name}" style="flex: 1; margin-right: 5px;">
+                  <button onclick="saveProfileUrl('${profile.name}')" class="success">Lưu URL</button>
+                </div>
+                <div>
+                  <button onclick="startSession('${profile.name}')">Chạy trực tiếp</button>
+                  <button onclick="startAdminSession('${profile.name}')" class="success">Chạy với quyền admin</button>
+                  <button onclick="duplicateProfile('${profile.name}')" class="success">Nhân bản</button>
+                </div>
               </td>
             `;
             profilesList.appendChild(row);
@@ -270,6 +345,46 @@
             profilesList.appendChild(row);
           }
         });
+    }
+    
+    // Lưu URL mặc định cho profile cụ thể
+    function saveProfileUrl(profileName) {
+      const urlInput = document.getElementById(`url_${profileName}`);
+      const url = urlInput.value.trim();
+      
+      if (!url) {
+        alert('Vui lòng nhập URL mặc định');
+        return;
+      }
+      
+      // Validate URL
+      try {
+        new URL(url);
+      } catch (e) {
+        alert('URL không hợp lệ. Vui lòng nhập URL đầy đủ, bao gồm http:// hoặc https://');
+        return;
+      }
+      
+      // Gửi URL đến server để lưu trữ
+      fetch(`/save-profile-url/${profileName}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ defaultUrl: url })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          alert(`Đã lưu URL mặc định cho profile ${profileName}`);
+        } else {
+          alert(`Lỗi: ${data.error}`);
+        }
+      })
+      .catch(error => {
+        console.error('Error saving profile URL:', error);
+        alert('Không thể lưu URL, vui lòng thử lại sau');
+      });
     }
     
     // Tải danh sách phiên đang hoạt động
@@ -387,6 +502,7 @@
         </style>
       `;
       
+      // URL mặc định sẽ được lấy từ server
       fetch(`/start-session?profile=${profileName}`)
         .then(response => {
           if (!response.ok) {
