@@ -101,7 +101,7 @@ app.get('/start-session', async (req, res) => {
           },
           Env: [
             "DISPLAY=:99",
-            "RESOLUTION=1920x1080x24"
+            "RESOLUTION=1440x900x24"
           ],
           HostConfig: {
             PortBindings: {
@@ -381,6 +381,16 @@ app.get('/admin/:sessionId', (req, res) => {
     return res.redirect('/admin');
   }
   res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
+
+// User session route
+app.get('/session/:sessionId', (req, res) => {
+  const { sessionId } = req.params;
+  // Kiểm tra xem session có tồn tại không
+  if (!activeSessions[sessionId]) {
+    return res.redirect('/');
+  }
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // Start the server
