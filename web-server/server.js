@@ -58,7 +58,7 @@ app.get('/profiles', (req, res) => {
 // API to start a new Chrome session
 app.get('/start-session', async (req, res) => {
   const sessionId = uuidv4();
-  const containerPort = 8080 + Object.keys(activeSessions).length;
+  const containerPort = 9080 + Object.keys(activeSessions).length;
   const profileName = req.query.profile || 'default';
   
   // Check if profile exists, if not use default
@@ -82,7 +82,10 @@ app.get('/start-session', async (req, res) => {
     // Create and start container using Dockerode
     console.log(`Starting container with profile ${profileName} on port ${containerPort}`);
     
-    // Sử dụng Docker volume được quản lý
+    // Xác định đường dẫn tuyệt đối đến thư mục chrome-profiles
+    const absoluteProfilesPath = path.resolve('/Users/dev/Documents/Mine/chrome-browser/chrome-profiles');
+    console.log(`Using profiles directory: ${absoluteProfilesPath}`);
+    
     const container = await docker.createContainer({
       Image: 'chrome-kiosk',
       name: `chrome-session-${sessionId}`,
@@ -99,9 +102,9 @@ app.get('/start-session', async (req, res) => {
           '8080/tcp': [{ HostPort: `${containerPort}` }]
         },
         Binds: [
-          "chrome-profiles:/app/chrome-profiles:rw"
+          `${absoluteProfilesPath}:/app/chrome-profiles:rw`
         ],
-        NetworkMode: "chrome-browser_chrome-network", // Kết nối đến mạng của docker-compose
+        NetworkMode: "chrome-browser_chrome-network",
         Privileged: false,
         ReadonlyRootfs: false
       }
@@ -124,7 +127,8 @@ app.get('/start-session', async (req, res) => {
     res.json({ 
       sessionId, 
       port: containerPort, 
-      profile: profileName 
+      profile: profileName,
+      url: `http://${req.hostname}:${containerPort}/vnc.html?autoconnect=true&resize=scale&password=`
     });
   } catch (error) {
     console.error(`Error starting container: ${error.message}`);
