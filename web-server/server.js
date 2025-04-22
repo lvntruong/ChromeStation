@@ -95,7 +95,7 @@ app.get('/start-session', async (req, res) => {
       },
       Env: [
         "DISPLAY=:99",
-        "RESOLUTION=1280x720x24"
+        "RESOLUTION=1920x1080x24"
       ],
       HostConfig: {
         PortBindings: {
@@ -344,6 +344,16 @@ app.get('/debug/docker', async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: error.message, stack: error.stack });
   }
+});
+
+// Admin session route
+app.get('/admin/:sessionId', (req, res) => {
+  const { sessionId } = req.params;
+  // Kiểm tra xem session có tồn tại không
+  if (!activeSessions[sessionId]) {
+    return res.redirect('/admin');
+  }
+  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
 // Start the server

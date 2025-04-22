@@ -91,11 +91,32 @@
       color: white;
       border: none;
       border-radius: 50%;
-      width: 30px;
-      height: 30px;
-      font-size: 16px;
+      width: 40px;
+      height: 40px;
+      font-size: 18px;
       cursor: pointer;
       z-index: 1001;
+    }
+    #frame-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      padding: 0;
+      margin: 0;
+      overflow: hidden;
+      height: 100%;
+    }
+    #frame-container iframe {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      border: none;
+      margin: 0;
+      padding: 0;
     }
     .status {
       padding: 8px 16px;
@@ -164,6 +185,8 @@
   
   <script>
     let currentSessionId = null;
+    let connectionRetries = 0;
+    const maxRetries = 10;
     
     // Khi trang được tải
     document.addEventListener('DOMContentLoaded', function() {
@@ -172,6 +195,26 @@
       setInterval(loadActiveSessions, 10000); // Refresh sessions every 10 seconds
       
       document.getElementById('close-button').addEventListener('click', closeSession);
+      
+      // Kiểm tra nếu URL có chứa sessionId
+      const pathParts = window.location.pathname.split('/');
+      if (pathParts.length >= 3 && pathParts[1] === 'admin') {
+        const sessionIdFromUrl = pathParts[2];
+        if (sessionIdFromUrl) {
+          // Trì hoãn kết nối để đảm bảo dữ liệu session đã được tải
+          setTimeout(() => {
+            // Lấy thông tin session từ API và kết nối
+            fetch('/admin/active-sessions')
+              .then(response => response.json())
+              .then(data => {
+                if (data.activeSessions[sessionIdFromUrl]) {
+                  const session = data.activeSessions[sessionIdFromUrl];
+                  connectToSession(sessionIdFromUrl, session.port);
+                }
+              });
+          }, 1000);
+        }
+      }
     });
     
     // Tải danh sách profiles
@@ -269,7 +312,7 @@
           currentSessionId = data.sessionId;
           document.getElementById('session-container').style.display = 'block';
           document.getElementById('frame-container').innerHTML = 
-            `<iframe src="http://${window.location.hostname}:${data.port}/vnc.html?autoconnect=true&resize=scale" width="100%" height="100%"></iframe>`;
+            `<iframe src="http://${window.location.hostname}:${data.port}/vnc.html?autoconnect=true&resize=remote" allowfullscreen="true"></iframe>`;
           loadActiveSessions();
         });
     }
@@ -277,15 +320,114 @@
     // Kết nối đến phiên đang chạy
     function connectToSession(sessionId, port) {
       currentSessionId = sessionId;
+      
+      // Cập nhật URL để thể hiện session hiện tại mà không load lại trang
+      const newUrl = `/admin/${sessionId}`;
+      history.pushState({sessionId: sessionId}, `Session ${sessionId}`, newUrl);
+      
       document.getElementById('session-container').style.display = 'block';
-      document.getElementById('frame-container').innerHTML = 
-        `<iframe src="http://${window.location.hostname}:${port}/vnc.html?autoconnect=true&resize=scale" width="100%" height="100%"></iframe>`;
+      
+      // Hiển thị thông báo đang kết nối
+      document.getElementById('frame-container').innerHTML = `
+        <div id="loading-message" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center;">
+          <h2>Đang kết nối đến phiên Chrome...</h2>
+          <p>Vui lòng đợi trong giây lát</p>
+          <div style="width: 50px; height: 50px; border: 5px solid #f3f3f3; border-top: 5px solid #3498db; border-radius: 50%; margin: 20px auto; animation: spin 2s linear infinite;"></div>
+        </div>
+        <style>
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        </style>
+        <iframe id="vnc-iframe" src="http://${window.location.hostname}:${port}/vnc.html?autoconnect=true&resize=remote" style="opacity: 0; position: absolute; top: 0; left: 0; width: 100%; height: 100%;" allowfullscreen="true" onload="handleIframeLoad()"></iframe>
+      `;
+      
+      connectionRetries = 0;
+      
+      // Timeout sau 30 giây nếu iframe không load được
+      setTimeout(checkIframeLoaded, 5000);
+    }
+    
+    // Kiểm tra xem iframe đã load thành công chưa
+    function checkIframeLoaded() {
+      const iframe = document.getElementById('vnc-iframe');
+      const loadingMessage = document.getElementById('loading-message');
+      
+      if (iframe && loadingMessage) {
+        connectionRetries++;
+        
+        try {
+          // Thử truy cập nội dung iframe để xem đã load chưa
+          const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+          
+          // Nếu truy cập được và đã load xong
+          if (iframe.contentWindow.document.readyState === 'complete') {
+            iframe.style.opacity = '1';
+            loadingMessage.style.display = 'none';
+            return;
+          }
+        } catch (e) {
+          // Có thể lỗi CORS, không thể truy cập nội dung iframe
+          console.log('Không thể kiểm tra nội dung iframe:', e);
+        }
+        
+        // Nếu đã thử quá số lần cho phép
+        if (connectionRetries >= maxRetries) {
+          loadingMessage.innerHTML = `
+            <h2>Không thể kết nối đến Chrome</h2>
+            <p>Đã thử kết nối ${maxRetries} lần nhưng không thành công.</p>
+            <button onclick="retryConnection()">Thử lại</button>
+            <button onclick="closeSession()">Đóng</button>
+          `;
+        } else {
+          // Thử lại sau 2 giây
+          setTimeout(checkIframeLoaded, 2000);
+        }
+      }
+    }
+    
+    // Xử lý sự kiện khi iframe load xong
+    function handleIframeLoad() {
+      const iframe = document.getElementById('vnc-iframe');
+      const loadingMessage = document.getElementById('loading-message');
+      
+      if (iframe && loadingMessage) {
+        // Đợi thêm 1 giây để noVNC kịp khởi tạo
+        setTimeout(() => {
+          iframe.style.opacity = '1';
+          loadingMessage.style.display = 'none';
+        }, 1000);
+      }
+    }
+    
+    // Thử kết nối lại
+    function retryConnection() {
+      if (currentSessionId) {
+        fetch('/admin/active-sessions')
+          .then(response => response.json())
+          .then(data => {
+            if (data.activeSessions[currentSessionId]) {
+              const session = data.activeSessions[currentSessionId];
+              connectToSession(currentSessionId, session.port);
+            } else {
+              alert('Phiên đã bị đóng hoặc không tồn tại.');
+              closeSession();
+            }
+          });
+      }
     }
     
     // Đóng phiên hiện tại
     function closeSession() {
       document.getElementById('session-container').style.display = 'none';
       document.getElementById('frame-container').innerHTML = '';
+      
+      // Quay lại URL /admin nếu đang ở URL session
+      if (window.location.pathname !== '/admin') {
+        history.pushState({}, 'Admin Dashboard', '/admin');
+      }
+      
       loadActiveSessions();
     }
     
