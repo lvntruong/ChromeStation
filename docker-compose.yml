@@ -19,10 +19,7 @@ services:
   chrome-base:
     build:
       context: ./chrome-container
-      platforms:
-        - linux/amd64
     image: chrome-kiosk
-    platform: linux/amd64
     networks:
       - chrome-network
 

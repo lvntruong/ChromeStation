@@ -1,10 +1,10 @@
-FROM --platform=linux/amd64 ubuntu:22.04
+FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV RESOLUTION=1920x1080x24
 ENV DISPLAY=:99
 
-# Cài đặt các gói cần thiết
+# Cài đặt các gói cơ bản
 RUN apt-get update && apt-get install -y \
     wget \
     gnupg \
@@ -40,19 +40,33 @@ RUN apt-get update && apt-get install -y \
     x11-utils \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Cài đặt Chrome bằng cách tải xuống file deb trực tiếp
-RUN wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
-    && apt-get update \
-    && apt-get install -y ./google-chrome-stable_current_amd64.deb \
-    && rm google-chrome-stable_current_amd64.deb \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+# Phát hiện kiến trúc và cài đặt trình duyệt thích hợp
+RUN arch=$(dpkg --print-architecture) && \
+    if [ "$arch" = "arm64" ]; then \
+        # Cài đặt Chromium cho ARM64 (native)
+        apt-get update && \
+        apt-get install -y chromium-browser && \
+        # Tạo symbolic link để lệnh "google-chrome" hoạt động
+        ln -sf /usr/bin/chromium-browser /usr/bin/google-chrome && \
+        ln -sf /usr/bin/chromium-browser /usr/bin/google-chrome-stable && \
+        apt-get clean && rm -rf /var/lib/apt/lists/*; \
+    else \
+        # Cài đặt Chrome cho AMD64
+        apt-get update && \
+        apt-get install -y wget gnupg && \
+        wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - && \
+        echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list && \
+        apt-get update && \
+        apt-get install -y google-chrome-stable && \
+        apt-get clean && rm -rf /var/lib/apt/lists/*; \
+    fi
 
 # Cài đặt noVNC
 RUN mkdir -p /app \
     && git clone --depth 1 https://github.com/novnc/noVNC.git /app/noVNC \
     && git clone --depth 1 https://github.com/novnc/websockify /app/noVNC/utils/websockify
 
-# Tạo người dùng không có quyền root để chạy Chrome
+# Tạo người dùng không có quyền root để chạy Chrome/Chromium
 RUN useradd -m chrome -s /bin/bash \
     && usermod -aG sudo chrome \
     && echo "chrome ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers \
@@ -73,8 +87,10 @@ RUN chmod +x /app/start-chrome.sh \
     && chmod +x /app/start-novnc.sh \
     && chown chrome:chrome /app/start-chrome.sh
 
-# Tạo thư mục logs
-RUN mkdir -p /var/log && chmod 777 /var/log
+# Tạo thư mục logs và đảm bảo thư mục chrome-profiles có sẵn
+RUN mkdir -p /var/log /app/chrome-profiles/default && \
+    chmod 777 /var/log && \
+    chown -R chrome:chrome /app/chrome-profiles
 
 # Mở các cổng
 EXPOSE 8080 5900

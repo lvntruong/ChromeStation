@@ -21,7 +21,7 @@ const port = 3000;
 const activeSessions = {};
 
 // Directory for Chrome profiles
-const profilesDir = path.join(__dirname, 'chrome-profiles');
+const profilesDir = path.join(__dirname, '..', 'chrome-profiles');
 
 // Ensure profiles directory exists
 if (!fs.existsSync(profilesDir)) {
@@ -66,40 +66,8 @@ app.get('/start-session', async (req, res) => {
   }
   
   try {
-    // Determine the absolute host path for Docker volume mounting
-    const absProfilePath = path.resolve(profilePath);
-    
-    // For Docker Desktop on Mac/Windows, we need to convert paths
-    // See if we're on macOS or Windows
-    const isWin = os.platform() === 'win32';
-    const isMac = os.platform() === 'darwin';
-    
-    let bindPath;
-    if (isMac) {
-      // For Mac: use /Users/path instead of /app/path
-      const homePath = os.homedir();
-      if (absProfilePath.includes('/app/')) {
-        bindPath = absProfilePath.replace('/app/', `${homePath}/`);
-      } else {
-        // Try to create a valid path
-        bindPath = absProfilePath;
-      }
-    } else if (isWin) {
-      // For Windows: convert C:\path to /c/path
-      bindPath = absProfilePath.replace(/^([A-Z]):/, (_, drive) => `/${drive.toLowerCase()}`);
-      bindPath = bindPath.replace(/\\/g, '/');
-    } else {
-      // Linux
-      bindPath = absProfilePath;
-    }
-    
+    // Log các đường dẫn để debug
     console.log(`Profile path: ${profilePath}`);
-    console.log(`Absolute profile path: ${absProfilePath}`);
-    console.log(`Binding path for Docker: ${bindPath}`);
-    
-    // Debugging info
-    console.log(`Platform: ${os.platform()}`);
-    console.log(`Home directory: ${os.homedir()}`);
     
     // Create a simple volume mount test to verify binding
     try {
@@ -117,18 +85,17 @@ app.get('/start-session', async (req, res) => {
       name: `chrome-session-${sessionId}`,
       Hostname: `chrome-session-${sessionId}`,
       ExposedPorts: {
-        '6080/tcp': {}
+        '8080/tcp': {}
       },
       Env: [
         "DISPLAY=:99",
-        "RESOLUTION=1280x720x24",
-        "XDG_RUNTIME_DIR=/tmp/runtime-dir"
+        "RESOLUTION=1280x720x24"
       ],
       HostConfig: {
         PortBindings: {
-          '6080/tcp': [{ HostPort: `${containerPort}` }]
+          '8080/tcp': [{ HostPort: `${containerPort}` }]
         },
-        Binds: [`${bindPath}:/root/chrome-profile:rw`],
+        Binds: [`${profilesDir}:/app/chrome-profiles:rw`],
         Privileged: false,
         ReadonlyRootfs: false
       }

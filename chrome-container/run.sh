@@ -13,16 +13,6 @@ if ! docker buildx version &> /dev/null; then
     docker buildx create --name mybuilder --use
 fi
 
-# Kiểm tra kiến trúc
-ARCH=$(uname -m)
-USE_PLATFORM=""
-
-if [ "$ARCH" = "arm64" ] || [ "$ARCH" = "aarch64" ]; then
-    echo "Phát hiện kiến trúc ARM64 (Apple Silicon)"
-    echo "Sẽ sử dụng mô phỏng để chạy container amd64"
-    USE_PLATFORM="--platform=linux/amd64"
-fi
-
 # Đường dẫn đến thư mục hiện tại
 CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROFILES_DIR="$CURRENT_DIR/../chrome-profiles"
@@ -30,14 +20,29 @@ PROFILES_DIR="$CURRENT_DIR/../chrome-profiles"
 # Tạo thư mục profiles nếu chưa tồn tại
 mkdir -p "$PROFILES_DIR/default"
 
-# Tạo image Docker - luôn sử dụng amd64 vì Chrome cho Linux chỉ hỗ trợ amd64
-echo "Đang tạo image Docker cho nền tảng amd64..."
-docker buildx build --platform=linux/amd64 -t chrome-kiosk "$CURRENT_DIR"
+# Phát hiện kiến trúc
+ARCH=$(uname -m)
+if [ "$ARCH" = "arm64" ] || [ "$ARCH" = "aarch64" ]; then
+    echo "Phát hiện kiến trúc ARM64 (Apple Silicon)"
+    echo "Sẽ sử dụng Chromium native trong container ARM64"
+    PLATFORM="linux/arm64"
+else
+    echo "Phát hiện kiến trúc AMD64/x86_64"
+    echo "Sẽ sử dụng Google Chrome trong container AMD64"
+    PLATFORM="linux/amd64"
+fi
+
+# Tạo image Docker cho kiến trúc hiện tại
+echo "Đang tạo image Docker cho nền tảng $PLATFORM..."
+docker buildx build --platform=$PLATFORM -t chrome-kiosk-$PLATFORM "$CURRENT_DIR"
+
+# Tạo alias cho image hiện tại
+docker tag chrome-kiosk-$PLATFORM chrome-kiosk
 
 # Chạy container
-echo "Khởi động container Chrome..."
+echo "Khởi động container Chrome trên nền tảng $PLATFORM..."
 docker run -d \
-    $USE_PLATFORM \
+    --platform=$PLATFORM \
     --name chrome-instance \
     -p 8080:8080 \
     -p 5900:5900 \
@@ -51,9 +56,4 @@ echo "- Web VNC: http://localhost:8080/vnc.html"
 echo "- VNC Client: localhost:5900"
 echo ""
 echo "Để dừng container, chạy: docker stop chrome-instance"
-echo "Để xóa container, chạy: docker rm chrome-instance"
-
-if [ -n "$USE_PLATFORM" ]; then
-    echo ""
-    echo "Lưu ý: Container đang chạy trên chế độ mô phỏng amd64, hiệu suất có thể chậm hơn trên Mac M1"
-fi 
+echo "Để xóa container, chạy: docker rm chrome-instance" 
