@@ -16,6 +16,11 @@ if [ -z "$DISPLAY" ]; then
   export DISPLAY=:99
 fi
 
+# Thiết lập biến môi trường cho locale và font
+export LANG=vi_VN.UTF-8
+export LANGUAGE=vi_VN:en
+export LC_ALL=vi_VN.UTF-8
+
 # Kiểm tra các thư mục quan trọng
 echo "Kiểm tra các thư mục và quyền..."
 ls -la /app/chrome-profiles/
@@ -147,7 +152,6 @@ exec sudo -u chrome $BROWSER_CMD \
     --disable-popup-blocking \
     --disable-prompt-on-repost \
     --disable-sync \
-    --disable-translate \
     --metrics-recording-only \
     --no-first-run \
     --safebrowsing-disable-auto-update \
@@ -156,5 +160,7 @@ exec sudo -u chrome $BROWSER_CMD \
     --start-maximized \
     --window-position=0,0 \
     --window-size=$RESOLUTION \
+    --lang=vi \
+    --font-render-hinting=medium \
     --kiosk \
-    "https://www.google.com" 2>&1 
+    "https://www.google.com.vn" 2>&1 

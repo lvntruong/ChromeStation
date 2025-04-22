@@ -50,7 +50,37 @@ RUN apt-get update && apt-get install -y \
     sudo \
     software-properties-common \
     x11-utils \
+    locales \
+    fonts-noto \
+    fonts-noto-cjk \
+    fonts-noto-color-emoji \
+    fonts-ubuntu \
+    fonts-liberation \
+    fontconfig \
+    # Thêm gói font hỗ trợ Tiếng Việt
+    fonts-dejavu \
+    fonts-dejavu-core \
+    fonts-dejavu-extra \
+    fonts-freefont-ttf \
+    fonts-liberation \
+    fonts-liberation2 \
+    fonts-ipafont-gothic \
+    fonts-wqy-zenhei \
+    fonts-thai-tlwg \
+    fonts-kacst \
+    fonts-symbola \
+    fonts-indic \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Cấu hình locale và font
+RUN locale-gen en_US.UTF-8 && \
+    locale-gen vi_VN.UTF-8 && \
+    fc-cache -f -v
+
+# Thiết lập biến môi trường locale
+ENV LANG=vi_VN.UTF-8 \
+    LANGUAGE=vi_VN:en \
+    LC_ALL=vi_VN.UTF-8
 
 # Cài đặt Chrome
 RUN apt-get update && \
