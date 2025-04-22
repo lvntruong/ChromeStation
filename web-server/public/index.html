@@ -175,12 +175,26 @@
       const profileName = document.getElementById('profile-select').value;
       
       fetch(`/start-session?profile=${profileName}`)
-        .then(response => response.json())
+        .then(response => {
+          if (!response.ok) {
+            throw new Error('Lỗi khi khởi động phiên');
+          }
+          return response.json();
+        })
         .then(data => {
           sessionId = data.sessionId;
           document.getElementById('session-container').style.display = 'block';
+          
+          // Sử dụng cổng đúng và đường dẫn đến noVNC
+          const vncUrl = `http://${window.location.hostname}:${data.port}/vnc.html?autoconnect=true&resize=scale&password=`;
+          console.log(`Connecting to VNC at: ${vncUrl}`);
+          
           document.getElementById('frame-container').innerHTML = 
-            `<iframe src="http://${window.location.hostname}:${data.port}/vnc.html?autoconnect=true&resize=scale" width="100%" height="100%"></iframe>`;
+            `<iframe src="${vncUrl}" width="100%" height="100%"></iframe>`;
+        })
+        .catch(error => {
+          alert(`Không thể kết nối: ${error.message}`);
+          console.error('Error starting session:', error);
         });
     }
     

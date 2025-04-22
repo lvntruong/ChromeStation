@@ -56,7 +56,7 @@ app.get('/profiles', (req, res) => {
 // API to start a new Chrome session
 app.get('/start-session', async (req, res) => {
   const sessionId = uuidv4();
-  const containerPort = 6080 + Object.keys(activeSessions).length;
+  const containerPort = 8080 + Object.keys(activeSessions).length;
   const profileName = req.query.profile || 'default';
   
   // Check if profile exists, if not use default
@@ -66,8 +66,10 @@ app.get('/start-session', async (req, res) => {
   }
   
   try {
-    // Log các đường dẫn để debug
+    // Lấy absolute path cho thư mục profile
+    const absProfilePath = path.resolve(profilesDir);
     console.log(`Profile path: ${profilePath}`);
+    console.log(`Absolute profile path: ${absProfilePath}`);
     
     // Create a simple volume mount test to verify binding
     try {
@@ -79,6 +81,21 @@ app.get('/start-session', async (req, res) => {
     
     // Create and start container using Dockerode
     console.log(`Starting container with profile ${profileName} on port ${containerPort}`);
+    
+    // Determine platform
+    const platform = os.platform();
+    console.log(`Host platform: ${platform}`);
+    
+    // Define bind mount based on platform
+    let binds = [];
+    if (platform === 'darwin') {
+      // On Mac we need to use the fully qualified path
+      binds = [`${absProfilePath}:/app/chrome-profiles:rw`];
+    } else {
+      binds = [`${profilesDir}:/app/chrome-profiles:rw`];
+    }
+    
+    console.log(`Using bind mount: ${binds[0]}`);
     
     const container = await docker.createContainer({
       Image: 'chrome-kiosk',
@@ -95,7 +112,7 @@ app.get('/start-session', async (req, res) => {
         PortBindings: {
           '8080/tcp': [{ HostPort: `${containerPort}` }]
         },
-        Binds: [`${profilesDir}:/app/chrome-profiles:rw`],
+        Binds: binds,
         Privileged: false,
         ReadonlyRootfs: false
       }

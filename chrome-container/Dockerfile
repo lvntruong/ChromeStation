@@ -36,30 +36,37 @@ RUN apt-get update && apt-get install -y \
     libxfixes3 \
     libxkbcommon0 \
     libxrandr2 \
+    libx11-6 \
+    libxcb1 \
+    libxext6 \
+    libxi6 \
+    libxtst6 \
+    libglib2.0-0 \
+    libpangocairo-1.0-0 \
+    libpango-1.0-0 \
+    libxcursor1 \
+    libxss1 \
+    libegl1 \
     sudo \
     x11-utils \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Phát hiện kiến trúc và cài đặt trình duyệt thích hợp
-RUN arch=$(dpkg --print-architecture) && \
-    if [ "$arch" = "arm64" ]; then \
-        # Cài đặt Chromium cho ARM64 (native)
-        apt-get update && \
+# Cài đặt Chrome
+RUN apt-get update && \
+    apt-get install -y wget && \
+    ARCH=$(dpkg --print-architecture) && \
+    if [ "$ARCH" = "amd64" ]; then \
+        wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb && \
+        apt-get install -y ./google-chrome-stable_current_amd64.deb && \
+        rm -f google-chrome-stable_current_amd64.deb; \
+    elif [ "$ARCH" = "arm64" ]; then \
+        # Chrome không hỗ trợ arm64 dưới dạng deb package, dùng Chromium
         apt-get install -y chromium-browser && \
-        # Tạo symbolic link để lệnh "google-chrome" hoạt động
-        ln -sf /usr/bin/chromium-browser /usr/bin/google-chrome && \
-        ln -sf /usr/bin/chromium-browser /usr/bin/google-chrome-stable && \
-        apt-get clean && rm -rf /var/lib/apt/lists/*; \
+        ln -sf /usr/bin/chromium-browser /usr/bin/google-chrome-stable; \
     else \
-        # Cài đặt Chrome cho AMD64
-        apt-get update && \
-        apt-get install -y wget gnupg && \
-        wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - && \
-        echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list && \
-        apt-get update && \
-        apt-get install -y google-chrome-stable && \
-        apt-get clean && rm -rf /var/lib/apt/lists/*; \
-    fi
+        echo "Kiến trúc $ARCH không được hỗ trợ" && exit 1; \
+    fi && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Cài đặt noVNC
 RUN mkdir -p /app \
@@ -90,6 +97,7 @@ RUN chmod +x /app/start-chrome.sh \
 # Tạo thư mục logs và đảm bảo thư mục chrome-profiles có sẵn
 RUN mkdir -p /var/log /app/chrome-profiles/default && \
     chmod 777 /var/log && \
+    chmod -R 777 /app/chrome-profiles && \
     chown -R chrome:chrome /app/chrome-profiles
 
 # Mở các cổng

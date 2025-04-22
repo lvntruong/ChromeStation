@@ -1,8 +1,8 @@
 #!/bin/bash
 # Script để khởi động Chrome/Chromium với cấu hình tốt nhất cho container
 
-# Kích hoạt chế độ debug để dễ dàng xác định vấn đề
-set -e
+# Cho phép lỗi để script không dừng đột ngột
+set +e
 
 # Kiểm tra và tạo thư mục profile nếu không tồn tại
 PROFILE_DIR="/app/chrome-profiles/default"
@@ -15,6 +15,12 @@ fi
 if [ -z "$DISPLAY" ]; then
   export DISPLAY=:99
 fi
+
+# Kiểm tra các thư mục quan trọng
+echo "Kiểm tra các thư mục và quyền..."
+ls -la /app/chrome-profiles/
+ls -la $PROFILE_DIR || echo "Thư mục profile không tồn tại hoặc không có quyền truy cập!"
+ls -la /home/chrome/ || echo "Thư mục home của user chrome không tồn tại!"
 
 # Chờ Xvfb khởi động hoàn tất
 echo "Đang chờ Xvfb khởi động..."
@@ -52,38 +58,69 @@ rm -f $PROFILE_DIR/SingletonCookie
 
 echo "Xvfb đã khởi động, bắt đầu chạy trình duyệt..."
 
-# Phát hiện trình duyệt đã cài đặt (Chrome hoặc Chromium)
-CHROME_PATH="/usr/bin/google-chrome-stable"
-CHROMIUM_PATH="/usr/bin/chromium-browser"
+# Thông tin debug để kiểm tra user hiện tại
+echo "Đang chạy với user $(whoami)"
+echo "HOME directory: $HOME"
+echo "Kiểm tra quyền sudo:"
+sudo -l
 
-if [ -f "$CHROMIUM_PATH" ]; then
-  BROWSER_CMD="$CHROMIUM_PATH"
-  echo "Đã phát hiện Chromium Browser tại $BROWSER_CMD"
-  BROWSER_VERSION=$($BROWSER_CMD --version 2>/dev/null || echo "Không thể xác định phiên bản")
-  echo "Chromium version: $BROWSER_VERSION"
-elif [ -f "$CHROME_PATH" ]; then
-  BROWSER_CMD="$CHROME_PATH"
-  echo "Đã phát hiện Google Chrome tại $BROWSER_CMD"
-  BROWSER_VERSION=$($BROWSER_CMD --version 2>/dev/null || echo "Không thể xác định phiên bản")
-  echo "Chrome version: $BROWSER_VERSION"
-else
-  echo "Không tìm thấy Chrome hoặc Chromium. Tìm kiếm trong PATH..."
-  if command -v google-chrome >/dev/null 2>&1; then
-    BROWSER_CMD=$(command -v google-chrome)
-    echo "Tìm thấy Google Chrome tại $BROWSER_CMD"
-  elif command -v chromium-browser >/dev/null 2>&1; then
-    BROWSER_CMD=$(command -v chromium-browser)
-    echo "Tìm thấy Chromium tại $BROWSER_CMD"
-  else
-    echo "Không tìm thấy trình duyệt nào! Thoát."
-    exit 1
-  fi
+# Phát hiện trình duyệt và sử dụng đường dẫn chính xác
+BROWSER_CMD="/usr/bin/google-chrome-stable"
+
+# Kiểm tra xem trình duyệt có tồn tại không
+if [ ! -f "$BROWSER_CMD" ]; then
+    echo "CẢNH BÁO: Không tìm thấy Google Chrome tại $BROWSER_CMD"
+    
+    # Tìm kiếm các đường dẫn khác
+    if [ -f "/opt/google/chrome/chrome" ]; then
+        BROWSER_CMD="/opt/google/chrome/chrome"
+        echo "Đã tìm thấy Chrome tại $BROWSER_CMD"
+    else
+        echo "Tìm kiếm Chrome trên hệ thống:"
+        find / -name "chrome" -o -name "google-chrome*" -type f 2>/dev/null
+        find / -name "chrome" -o -name "google-chrome*" -type f -executable 2>/dev/null | head -5
+        
+        # Thử cách cuối cùng
+        if command -v google-chrome >/dev/null 2>&1; then
+            BROWSER_CMD=$(command -v google-chrome)
+            echo "Tìm thấy Google Chrome trong PATH: $BROWSER_CMD"
+        elif command -v google-chrome-stable >/dev/null 2>&1; then
+            BROWSER_CMD=$(command -v google-chrome-stable)
+            echo "Tìm thấy Google Chrome Stable trong PATH: $BROWSER_CMD"
+        else
+            echo "Không tìm thấy trình duyệt Chrome! Thoát."
+            exit 1
+        fi
+    fi
 fi
+
+# Kiểm tra phiên bản và thông tin
+echo "Kiểm tra phiên bản trình duyệt:"
+$BROWSER_CMD --version || echo "Không thể xác định phiên bản"
 
 # Log thông tin debug
 echo "Khởi động $BROWSER_CMD với profile: $PROFILE_DIR"
 
+# Thử chạy với quyền debug để xem lỗi
+echo "Thử chạy browser với --version để kiểm tra:"
+sudo -u chrome $BROWSER_CMD --version >/dev/null 2>&1
+if [ $? -ne 0 ]; then
+    echo "Không thể chạy browser với --version, có thể có vấn đề với quyền! Thử chạy với --help"
+    sudo -u chrome $BROWSER_CMD --help >/dev/null 2>&1
+    if [ $? -ne 0 ]; then
+        echo "Cũng không thể chạy với --help. Lỗi nghiêm trọng về quyền hoặc cài đặt!"
+    fi
+else
+    echo "Browser command hoạt động bình thường với --version."
+fi
+
+# Thử tạo thư mục tạm thời cho Chrome
+TMP_DIR="/tmp/chrome-data"
+mkdir -p $TMP_DIR
+chown -R chrome:chrome $TMP_DIR
+
 # Chạy trình duyệt với tùy chọn an toàn
+echo "Khởi động browser với đầy đủ tham số..."
 exec sudo -u chrome $BROWSER_CMD \
     --user-data-dir=$PROFILE_DIR \
     --no-sandbox \
@@ -115,4 +152,4 @@ exec sudo -u chrome $BROWSER_CMD \
     --window-position=0,0 \
     --window-size=$RESOLUTION \
     --kiosk \
-    "https://www.google.com" 
+    "https://www.google.com" 2>&1 
