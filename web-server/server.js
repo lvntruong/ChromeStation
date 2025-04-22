@@ -12,6 +12,9 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIO(server);
 
+// Middleware để xử lý dữ liệu JSON trong body request
+app.use(express.json());
+
 // Khởi tạo Docker client
 const docker = new Docker({ socketPath: '/var/run/docker.sock' });
 
@@ -20,9 +23,12 @@ const port = 3000;
 // Store information about running containers
 const activeSessions = {};
 
-// Cấu hình thư mục profile đúng đường dẫn trong container
-const profilesDir = '/app/chrome-profiles';
-console.log(`Profile directory in container: ${profilesDir}`);
+// Cấu hình thư mục profile trong container
+const profilesDir = path.join(__dirname, 'chrome-profiles');
+console.log(`Profile directory: ${profilesDir}`);
+
+// Đối với môi trường Docker, cần xác định đường dẫn thật từ host
+const hostProfilesDir = process.env.HOST_PROFILES_DIR || '/Users/dev/Documents/Mine/chrome-browser/chrome-profiles';
 
 // Ensure profiles directory exists
 if (!fs.existsSync(profilesDir)) {
@@ -83,17 +89,19 @@ app.get('/start-session', async (req, res) => {
     let maxAttempts = 100; // Giới hạn số lần thử
     let portFound = false;
     
-    // Xác định đường dẫn tuyệt đối đến thư mục chrome-profiles
-    const absoluteProfilesPath = path.resolve('/Users/dev/Documents/Mine/chrome-browser/chrome-profiles/');
-    console.log(`Using profiles directory: ${absoluteProfilesPath}`);
+    console.log(`Using profiles directory: ${hostProfilesDir}`);
     
     // Tạo container và xử lý lỗi port bị trùng
     while (!portFound && maxAttempts > 0) {
       try {
         console.log(`Trying to start container with profile ${profileName} on port ${containerPort}`);
         
+        // Xác định nếu profile là admin thì sẽ cài đặt ADMIN_MODE=1
+        const isAdmin = req.query.admin === 'true';
+        console.log(`Starting session with admin mode: ${isAdmin ? 'YES' : 'NO'}`);
+        
         const container = await docker.createContainer({
-          Image: 'chrome-kiosk',
+          Image: 'chrome-base',  // Sử dụng image chrome-base thay vì chrome-kiosk
           name: `chrome-session-${sessionId}`,
           Hostname: `chrome-session-${sessionId}`,
           ExposedPorts: {
@@ -101,14 +109,15 @@ app.get('/start-session', async (req, res) => {
           },
           Env: [
             "DISPLAY=:99",
-            "RESOLUTION=1440x900x24"
+            "RESOLUTION=1440x900x24",
+            `ADMIN_MODE=${isAdmin ? '1' : '0'}`
           ],
           HostConfig: {
             PortBindings: {
               '8080/tcp': [{ HostPort: `${containerPort}` }]
             },
             Binds: [
-              `${absoluteProfilesPath}/${profileName}:/app/chrome-profiles:rw`
+              `${hostProfilesDir}/${profileName}:/app/chrome-profiles/default:rw`
             ],
             NetworkMode: "chrome-browser_chrome-network",
             Privileged: false,
@@ -391,6 +400,108 @@ app.get('/session/:sessionId', (req, res) => {
     return res.redirect('/');
   }
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// API tạo session admin với quyền đầy đủ
+app.post('/api/admin/sessions', async (req, res) => {
+  try {
+    const profileName = req.body.profile || 'default';
+    const adminKey = req.body.adminKey || '';
+    
+    // Kiểm tra xác thực admin key (nên sử dụng env var thực tế)
+    const validAdminKey = process.env.ADMIN_KEY || 'admin-secret-key';
+    
+    if (adminKey !== validAdminKey) {
+      return res.status(403).json({ error: 'Invalid admin key' });
+    }
+    
+    // Kiểm tra và tạo thư mục profile nếu chưa tồn tại
+    const profilePath = path.join(profilesDir, profileName);
+    if (!fs.existsSync(profilePath)) {
+      fs.mkdirSync(profilePath, { recursive: true });
+      console.log(`Created profile directory for admin session: ${profilePath}`);
+    }
+    
+    // Tạo session với admin mode
+    const sessionId = uuidv4();
+    let containerPort = 9222;
+    let portFound = false;
+    let maxAttempts = 10;
+
+    console.log(`Creating admin session with profile ${profileName}`);
+    
+    // Logic tạo container tương tự như API sessions thông thường
+    // nhưng với admin mode bật
+    while (!portFound && maxAttempts > 0) {
+      try {
+        console.log(`Trying to start admin container with profile ${profileName} on port ${containerPort}`);
+        
+        const container = await docker.createContainer({
+          Image: 'chrome-base',  // Sử dụng chrome-base thay vì chrome-kiosk
+          name: `chrome-session-${sessionId}`,
+          Hostname: `chrome-session-${sessionId}`,
+          ExposedPorts: {
+            '8080/tcp': {}
+          },
+          Env: [
+            "DISPLAY=:99",
+            "RESOLUTION=1440x900x24",
+            "ADMIN_MODE=1"  // Luôn bật admin mode
+          ],
+          HostConfig: {
+            NetworkMode: 'chrome-browser_chrome-network',
+            PortBindings: {
+              '8080/tcp': [{ HostPort: containerPort.toString() }]
+            },
+            Binds: [
+              `${hostProfilesDir}/${profileName}:/app/chrome-profiles/default:rw`
+            ],
+            Privileged: false,
+            ReadonlyRootfs: false
+          }
+        });
+
+        await container.start();
+        
+        // Get container info
+        const containerInfo = await container.inspect();
+        
+        activeSessions[sessionId] = {
+          containerId: containerInfo.Id,
+          port: containerPort,
+          profile: profileName,
+          adminMode: true,
+          startTime: new Date()
+        };
+        
+        portFound = true;
+        console.log(`Started new ADMIN session: ${sessionId} on port ${containerPort} with profile ${profileName}`);
+      } catch (err) {
+        if (err.message && err.message.includes('port is already allocated')) {
+          console.log(`Port ${containerPort} is already in use, trying next port`);
+          containerPort++;
+          maxAttempts--;
+        } else {
+          throw err;
+        }
+      }
+    }
+
+    if (!portFound) {
+      return res.status(500).json({ error: 'Failed to find available port after multiple attempts' });
+    }
+
+    res.json({
+      sessionId,
+      port: containerPort,
+      profile: profileName,
+      adminMode: true,
+      url: `http://${req.hostname}:${containerPort}/vnc.html?autoconnect=true&resize=scale&password=`
+    });
+  } catch (err) {
+    console.error('Error creating admin session:', err);
+    res.status(500).json({ error: 'Internal server error', details: err.message });
+  }
 });
 
 // Start the server

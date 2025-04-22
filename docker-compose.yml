@@ -13,6 +13,7 @@ services:
     environment:
       - NODE_ENV=development
       - DOCKER_HOST=unix:///var/run/docker.sock
+      - HOST_PROFILES_DIR=/Users/dev/Documents/Mine/chrome-browser/chrome-profiles
     command: npm run dev  # Sử dụng nodemon trong development mode
     restart: unless-stopped
     networks:
@@ -21,13 +22,21 @@ services:
   chrome-base:
     build:
       context: ./chrome-container
-    image: chrome-kiosk
+    image: chrome-base
     profiles: ["no-autostart"]  # Không tự khởi động container này 
     volumes:
-      - ./chrome-profiles:/app/chrome-profiles:rw  # Sử dụng thư mục từ dự án
+      - ./chrome-profiles:/app/chrome-profiles:rw
+      - ./chrome-container/start-chrome.sh:/app/start-chrome.sh:ro
+      - ./chrome-container/start-xvfb.sh:/app/start-xvfb.sh:ro
+      - ./chrome-container/start-vnc.sh:/app/start-vnc.sh:ro
+      - ./chrome-container/start-novnc.sh:/app/start-novnc.sh:ro
+      - ./chrome-container/supervisord.conf:/etc/supervisor/conf.d/supervisord.conf:ro
     ports:
       - "8080:8080"
       - "5900:5900"
+    environment:
+      - RESOLUTION=1920x1080x24
+      - ADMIN_MODE=${ADMIN_MODE:-0}
     networks:
       - chrome-network
 

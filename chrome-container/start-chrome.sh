@@ -21,6 +21,9 @@ export LANG=vi_VN.UTF-8
 export LANGUAGE=vi_VN:en
 export LC_ALL=vi_VN.UTF-8
 
+# Kiểm tra chế độ admin (được chuyển qua từ biến môi trường)
+ADMIN_MODE=${ADMIN_MODE:-0}
+
 # Kiểm tra các thư mục quan trọng
 echo "Kiểm tra các thư mục và quyền..."
 ls -la /app/chrome-profiles/
@@ -129,38 +132,57 @@ TMP_DIR="/tmp/chrome-data"
 mkdir -p $TMP_DIR
 chown -R chrome:chrome $TMP_DIR
 
-# Chạy trình duyệt với tùy chọn an toàn
-echo "Khởi động browser với đầy đủ tham số..."
-exec sudo -u chrome $BROWSER_CMD \
-    --user-data-dir=$PROFILE_DIR \
-    --no-sandbox \
-    --disable-dev-shm-usage \
-    --disable-gpu \
-    --disable-software-rasterizer \
-    --disable-background-networking \
-    --disable-background-timer-throttling \
-    --disable-backgrounding-occluded-windows \
-    --disable-breakpad \
-    --disable-client-side-phishing-detection \
-    --disable-component-update \
-    --disable-default-apps \
-    --disable-domain-reliability \
-    --disable-extensions \
-    --disable-features=Translate,BackForwardCache \
-    --disable-hang-monitor \
-    --disable-ipc-flooding-protection \
-    --disable-popup-blocking \
-    --disable-prompt-on-repost \
-    --disable-sync \
-    --metrics-recording-only \
-    --no-first-run \
-    --safebrowsing-disable-auto-update \
-    --password-store=basic \
-    --use-mock-keychain \
-    --start-maximized \
-    --window-position=0,0 \
-    --window-size=$RESOLUTION \
-    --lang=vi \
-    --font-render-hinting=medium \
-    --kiosk \
-    "https://www.google.com.vn" 2>&1 
+# Cài đặt tham số chạy cho Chrome dựa trên chế độ (admin/user)
+if [ "$ADMIN_MODE" = "1" ]; then
+    echo "Chạy trong chế độ ADMIN với đầy đủ tính năng..."
+    # Chạy Chrome với tính năng đầy đủ cho Admin
+    exec sudo -u chrome $BROWSER_CMD \
+        --user-data-dir=$PROFILE_DIR \
+        --no-sandbox \
+        --disable-dev-shm-usage \
+        --disable-gpu \
+        --disable-software-rasterizer \
+        --password-store=basic \
+        --start-maximized \
+        --window-position=0,0 \
+        --window-size=$RESOLUTION \
+        --lang=vi \
+        --font-render-hinting=medium \
+        "https://www.google.com.vn" 2>&1
+else
+    echo "Chạy trong chế độ USER với tính năng hạn chế..."
+    # Chạy Chrome với tùy chọn an toàn cho người dùng thông thường
+    exec sudo -u chrome $BROWSER_CMD \
+        --user-data-dir=$PROFILE_DIR \
+        --no-sandbox \
+        --disable-dev-shm-usage \
+        --disable-gpu \
+        --disable-software-rasterizer \
+        --disable-background-networking \
+        --disable-background-timer-throttling \
+        --disable-backgrounding-occluded-windows \
+        --disable-breakpad \
+        --disable-client-side-phishing-detection \
+        --disable-component-update \
+        --disable-default-apps \
+        --disable-domain-reliability \
+        --disable-extensions \
+        --disable-features=Translate,BackForwardCache \
+        --disable-hang-monitor \
+        --disable-ipc-flooding-protection \
+        --disable-popup-blocking \
+        --disable-prompt-on-repost \
+        --disable-sync \
+        --metrics-recording-only \
+        --no-first-run \
+        --safebrowsing-disable-auto-update \
+        --password-store=basic \
+        --use-mock-keychain \
+        --start-maximized \
+        --window-position=0,0 \
+        --window-size=$RESOLUTION \
+        --lang=vi \
+        --font-render-hinting=medium \
+        --kiosk \
+        "https://www.google.com.vn" 2>&1
+fi
