@@ -1,0 +1,33 @@
+version: '3'
+
+services:
+  web-server:
+    build:
+      context: ./web-server
+    ports:
+      - "3000:3000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./chrome-profiles:/app/chrome-profiles
+    environment:
+      - NODE_ENV=production
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    restart: unless-stopped
+    networks:
+      - chrome-network
+
+  chrome-base:
+    build:
+      context: ./chrome-container
+      dockerfile: Dockerfile.simple
+    image: chrome-kiosk-simple
+    networks:
+      - chrome-network
+
+networks:
+  chrome-network:
+    driver: bridge
+
+volumes:
+  chrome-profiles:
+    driver: local 

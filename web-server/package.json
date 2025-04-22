@@ -1,0 +1,23 @@
+{
+  "name": "chrome-session-manager",
+  "version": "1.0.0",
+  "description": "Hệ thống quản lý các phiên Chrome cho nhiều người dùng",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [
+    "chrome",
+    "docker",
+    "novnc",
+    "session"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "uuid": "^9.0.0",
+    "socket.io": "^4.5.4",
+    "dockerode": "^3.3.5"
+  }
+} 

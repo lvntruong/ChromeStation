@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Chrome Session Manager</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      text-align: center;
+      background-color: #f5f5f5;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background-color: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+    h1 {
+      color: #4285f4;
+    }
+    p {
+      color: #5f6368;
+      margin-bottom: 20px;
+    }
+    button {
+      background-color: #4285f4;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      font-size: 16px;
+      cursor: pointer;
+      border-radius: 4px;
+      margin: 20px 0;
+      transition: background-color 0.3s;
+    }
+    button:hover {
+      background-color: #3367d6;
+    }
+    iframe {
+      width: 100%;
+      height: 90vh;
+      border: none;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    }
+    #session-container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1000;
+      background: white;
+      display: none;
+    }
+    .close-button {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: #ea4335;
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 30px;
+      height: 30px;
+      font-size: 16px;
+      cursor: pointer;
+      z-index: 1001;
+    }
+    .footer {
+      margin-top: 20px;
+      font-size: 12px;
+      color: #9aa0a6;
+    }
+    select {
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 16px;
+      margin-bottom: 20px;
+      width: 100%;
+      max-width: 300px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Chrome Session Manager</h1>
+    <p>Chọn profile và nhấn vào nút bên dưới để bắt đầu phiên Chrome mới</p>
+    
+    <select id="profile-select">
+      <option value="default">Profile mặc định</option>
+      <!-- Các profile khác sẽ được thêm vào đây -->
+    </select>
+    
+    <button id="start-button">Bắt đầu phiên Chrome</button>
+    <div class="footer">
+      <p>Lưu ý: Phiên sẽ tự động đóng sau 1 giờ không hoạt động hoặc khi bạn đóng tab này</p>
+    </div>
+  </div>
+
+  <div id="session-container">
+    <button class="close-button" id="close-button">X</button>
+    <div id="frame-container"></div>
+  </div>
+  
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    // Connect to Socket.IO
+    const socket = io();
+    let sessionId = null;
+    
+    // Track user activity
+    let lastActivity = Date.now();
+    const inactivityTimeout = 60 * 60 * 1000; // 1 hour in milliseconds
+    
+    function updateActivity() {
+      lastActivity = Date.now();
+    }
+    
+    // Check for inactivity every minute
+    setInterval(() => {
+      if (sessionId && Date.now() - lastActivity > inactivityTimeout) {
+        closeSession();
+        alert('Phiên đã bị đóng do không hoạt động trong 1 giờ');
+      }
+    }, 60000);
+    
+    // Add activity listeners
+    ['mousemove', 'keydown', 'click', 'touchstart'].forEach(event => {
+      document.addEventListener(event, updateActivity);
+    });
+
+    // Load profiles when the page loads
+    document.addEventListener('DOMContentLoaded', () => {
+      loadProfiles();
+      
+      // Start session button
+      document.getElementById('start-button').addEventListener('click', startSession);
+      
+      // Close session button
+      document.getElementById('close-button').addEventListener('click', closeSession);
+    });
+    
+    // Load available profiles
+    function loadProfiles() {
+      fetch('/profiles')
+        .then(response => response.json())
+        .then(data => {
+          const profileSelect = document.getElementById('profile-select');
+          
+          // Keep the default option
+          const defaultOption = profileSelect.options[0];
+          profileSelect.innerHTML = '';
+          profileSelect.appendChild(defaultOption);
+          
+          // Add other profiles
+          data.profiles.forEach(profile => {
+            if (profile.name !== 'default') {
+              const option = document.createElement('option');
+              option.value = profile.name;
+              option.textContent = profile.name;
+              profileSelect.appendChild(option);
+            }
+          });
+        });
+    }
+    
+    // Start a new session
+    function startSession() {
+      const profileName = document.getElementById('profile-select').value;
+      
+      fetch(`/start-session?profile=${profileName}`)
+        .then(response => response.json())
+        .then(data => {
+          sessionId = data.sessionId;
+          document.getElementById('session-container').style.display = 'block';
+          document.getElementById('frame-container').innerHTML = 
+            `<iframe src="http://${window.location.hostname}:${data.port}/vnc.html?autoconnect=true&resize=scale" width="100%" height="100%"></iframe>`;
+        });
+    }
+    
+    // Close session
+    function closeSession() {
+      if (sessionId) {
+        fetch(`/end-session/${sessionId}`)
+          .then(() => {
+            sessionId = null;
+            document.getElementById('session-container').style.display = 'none';
+            document.getElementById('frame-container').innerHTML = '';
+          });
+      } else {
+        document.getElementById('session-container').style.display = 'none';
+        document.getElementById('frame-container').innerHTML = '';
+      }
+    }
+    
+    // Handle page unload/close
+    window.addEventListener('beforeunload', () => {
+      if (sessionId) {
+        // Send a synchronous request to end the session
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', `/end-session/${sessionId}`, false);
+        xhr.send();
+      }
+    });
+    
+    // Handle socket disconnect events
+    socket.on('disconnect', () => {
+      if (sessionId) {
+        closeSession();
+      }
+    });
+  </script>
+</body>
+</html> 

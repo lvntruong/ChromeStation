@@ -1,0 +1,6 @@
+# Quy tắc Cursor cho dự án Chrome Browser
+- Mã nguồn phải được viết bằng tiếng Anh, ngay cả chú thích cũng phải viết bằng tiếng Anh
+- Tuân thủ chuẩn code style và quy ước đặt tên
+- Đảm bảo tính an toàn khi nhiều người dùng sử dụng chung profile Chrome
+- Đảm bảo hiệu suất của ứng dụng
+- Ghi chú rõ ràng ở các phần quan trọng của code 
