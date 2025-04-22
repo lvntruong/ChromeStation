@@ -58,7 +58,6 @@ app.get('/profiles', (req, res) => {
 // API to start a new Chrome session
 app.get('/start-session', async (req, res) => {
   const sessionId = uuidv4();
-  const containerPort = 9080 + Object.keys(activeSessions).length;
   const profileName = req.query.profile || 'default';
   
   // Check if profile exists, if not use default
@@ -79,57 +78,85 @@ app.get('/start-session', async (req, res) => {
       console.error(`Error creating test file: ${err.message}`);
     }
     
-    // Create and start container using Dockerode
-    console.log(`Starting container with profile ${profileName} on port ${containerPort}`);
+    // Tìm cổng trống để khởi động container
+    let containerPort = 9080 + Object.keys(activeSessions).length;
+    let maxAttempts = 100; // Giới hạn số lần thử
+    let portFound = false;
     
     // Xác định đường dẫn tuyệt đối đến thư mục chrome-profiles
-    const absoluteProfilesPath = path.resolve('/Users/dev/Documents/Mine/chrome-browser/chrome-profiles/' + profileName);
+    const absoluteProfilesPath = path.resolve('/Users/dev/Documents/Mine/chrome-browser/chrome-profiles/');
     console.log(`Using profiles directory: ${absoluteProfilesPath}`);
     
-    const container = await docker.createContainer({
-      Image: 'chrome-kiosk',
-      name: `chrome-session-${sessionId}`,
-      Hostname: `chrome-session-${sessionId}`,
-      ExposedPorts: {
-        '8080/tcp': {}
-      },
-      Env: [
-        "DISPLAY=:99",
-        "RESOLUTION=1920x1080x24"
-      ],
-      HostConfig: {
-        PortBindings: {
-          '8080/tcp': [{ HostPort: `${containerPort}` }]
-        },
-        Binds: [
-          `${absoluteProfilesPath}:/app/chrome-profiles:rw`
-        ],
-        NetworkMode: "chrome-browser_chrome-network",
-        Privileged: false,
-        ReadonlyRootfs: false
+    // Tạo container và xử lý lỗi port bị trùng
+    while (!portFound && maxAttempts > 0) {
+      try {
+        console.log(`Trying to start container with profile ${profileName} on port ${containerPort}`);
+        
+        const container = await docker.createContainer({
+          Image: 'chrome-kiosk',
+          name: `chrome-session-${sessionId}`,
+          Hostname: `chrome-session-${sessionId}`,
+          ExposedPorts: {
+            '8080/tcp': {}
+          },
+          Env: [
+            "DISPLAY=:99",
+            "RESOLUTION=1920x1080x24"
+          ],
+          HostConfig: {
+            PortBindings: {
+              '8080/tcp': [{ HostPort: `${containerPort}` }]
+            },
+            Binds: [
+              `${absoluteProfilesPath}/${profileName}:/app/chrome-profiles:rw`
+            ],
+            NetworkMode: "chrome-browser_chrome-network",
+            Privileged: false,
+            ReadonlyRootfs: false
+          }
+        });
+        
+        await container.start();
+        
+        // Nếu không có lỗi, đánh dấu đã tìm thấy cổng
+        portFound = true;
+        
+        // Get container info
+        const containerInfo = await container.inspect();
+        
+        // Save container information
+        activeSessions[sessionId] = {
+          containerId: containerInfo.Id,
+          port: containerPort,
+          startTime: new Date(),
+          profile: profileName
+        };
+        
+        console.log(`Started new session: ${sessionId} on port ${containerPort} with profile ${profileName}`);
+        res.json({ 
+          sessionId, 
+          port: containerPort, 
+          profile: profileName,
+          url: `http://${req.hostname}:${containerPort}/vnc.html?autoconnect=true&resize=scale&password=`
+        });
+        
+      } catch (error) {
+        if (error.message.includes('port is already allocated')) {
+          // Nếu port đã bị chiếm, thử cổng tiếp theo
+          console.log(`Port ${containerPort} is already in use. Trying next port.`);
+          containerPort++;
+          maxAttempts--;
+        } else {
+          // Nếu lỗi khác, ném lỗi để xử lý bên ngoài
+          throw error;
+        }
       }
-    });
+    }
     
-    await container.start();
-    
-    // Get container info
-    const containerInfo = await container.inspect();
-    
-    // Save container information
-    activeSessions[sessionId] = {
-      containerId: containerInfo.Id,
-      port: containerPort,
-      startTime: new Date(),
-      profile: profileName
-    };
-    
-    console.log(`Started new session: ${sessionId} on port ${containerPort} with profile ${profileName}`);
-    res.json({ 
-      sessionId, 
-      port: containerPort, 
-      profile: profileName,
-      url: `http://${req.hostname}:${containerPort}/vnc.html?autoconnect=true&resize=scale&password=`
-    });
+    // Nếu không tìm thấy cổng trống
+    if (!portFound) {
+      throw new Error(`Could not find available port after ${100 - maxAttempts} attempts`);
+    }
   } catch (error) {
     console.error(`Error starting container: ${error.message}`);
     res.status(500).json({ error: 'Failed to start session', details: error.message });
